@@ -1,19 +1,9 @@
 {
   "version": 1,
-  "dfx": "0.10.0",
   "canisters": {
     "can_manager": {
       "type": "motoko",
       "main": "src/can_manager/main.mo"
-    },
-    "can_manager_assets": {
-      "type": "assets",
-      "source": [
-        "src/can_manager_assets/assets"
-      ],
-      "dependencies": [
-        "can_manager"
-      ]
     }
   },
   "defaults": {

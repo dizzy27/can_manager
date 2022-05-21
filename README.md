@@ -1,5 +1,12 @@
 # can_manager
 
+## 根据本次课程要求，第二课作业只需实现5个接口的功能，无需实现M/N的多签：
+crate_canister
+install_code
+start_canister
+stop_canister
+delete_canister
+
 Welcome to your new can_manager project and to the internet computer development community. By default, creating a new project adds this README and some template files to your project directory. You can edit these template files to customize your project and to include your own code to speed up the development cycle.
 
 To get started, you might want to explore the project directory structure and the default configuration file. Working with this project in your development environment will not affect any production deployment or identity tokens.
