@@ -69,7 +69,8 @@ actor class Manager(members_init: [Principal], auth_threhold: Nat) = self {
   };
 
   //创建被该多人钱包管理的canister
-  public shared({caller}) func create_canister() : async IC.canister_id {    
+  public shared({caller}) func create_canister() : async IC.canister_id {
+    assert(includes(members, caller));
     let settings = {
       freezing_threshold = null;
       controllers = ?[Principal.fromActor(self)];
@@ -90,6 +91,7 @@ actor class Manager(members_init: [Principal], auth_threhold: Nat) = self {
     canister: Text,
     mode: { #reinstall; #upgrade; #install }
   ) : async Text { 
+    assert(includes(members, caller));
     let settings = { 
       arg = [];  
       wasm_module = Blob.toArray(wasm);
@@ -101,7 +103,8 @@ actor class Manager(members_init: [Principal], auth_threhold: Nat) = self {
     "code installed for " # canister
   };
 
-  public shared({caller}) func start_canister(canister : Text) : async () {    
+  public shared({caller}) func start_canister(canister : Text) : async () {
+    assert(includes(members, caller));
     let settings = { 
       canister_id = Principal.fromText(canister);
     };
@@ -109,7 +112,8 @@ actor class Manager(members_init: [Principal], auth_threhold: Nat) = self {
     await ic.start_canister(settings)
   };
 
-  public shared({caller}) func stop_canister(canister : Text) : async () {    
+  public shared({caller}) func stop_canister(canister : Text) : async () {
+    assert(includes(members, caller));
     let settings = { 
       canister_id = Principal.fromText(canister);
     };
@@ -117,7 +121,8 @@ actor class Manager(members_init: [Principal], auth_threhold: Nat) = self {
     await ic.stop_canister(settings)
   };
 
-  public shared({caller}) func delete_canister(canister : Text) : async () {    
+  public shared({caller}) func delete_canister(canister : Text) : async () {
+    assert(includes(members, caller));
     let settings = { 
       canister_id = Principal.fromText(canister);
     };
@@ -163,11 +168,12 @@ actor class Manager(members_init: [Principal], auth_threhold: Nat) = self {
   };
 
   private var new_proposal_index: Nat = 0;
-  private let proposals = RBT.RBTree<Nat, (Operation, Buffer.Buffer<Principal>)>(Nat.compare);
+  // <id, [(proposal, voters, approves)]>
+  private let proposals = RBT.RBTree<Nat, (Operation, Buffer.Buffer<Principal>, Nat)>(Nat.compare);
 
   func includes(principals: [Principal], principal: Principal): Bool {
     for (p in principals.vals()) {
-      if (Principal.toText(principal) == Principal.toText(p)) { 
+      if (Principal.toText(principal) == Principal.toText(p)) {
         return true
       };
     };
@@ -180,12 +186,12 @@ actor class Manager(members_init: [Principal], auth_threhold: Nat) = self {
     assert(includes(members, caller));
     let voters = Buffer.Buffer<Principal>(1);
     voters.add(caller);
-    proposals.put(new_proposal_index, (proposal, voters));
+    proposals.put(new_proposal_index, (proposal, voters, 1));
     new_proposal_index += 1;
   };
 
   // 实现M/N的多签执行
-  public shared({caller}) func vote(proposal_id: Nat): async Text {
+  public shared({caller}) func vote(proposal_id: Nat, approve: Bool): async Text {
     // Debug.print(Principal.toText(caller));
     assert(includes(members, caller));
     let proposal = proposals.get(proposal_id);
@@ -194,15 +200,21 @@ actor class Manager(members_init: [Principal], auth_threhold: Nat) = self {
         let voters = proposal.1;
         if (includes(voters.toArray(), caller)) return "Already voted";
         voters.add(caller);
-        proposals.put(proposal_id, (proposal.0, voters));
-        if (voters.size() >= M) return "Proposal excuted"
+
+        var approves = proposal.2;
+        if (approve) approves += 1;
+        proposals.put(proposal_id, (proposal.0, voters, approves));
+        
+        if (voters.size() >= N or approves >= M) {
+          if (approves >= M) return "Proposal excuted"
+          else return "Proposal rejected";
+        }
         else return "Proposal voted";
       };
       case (null) { "Error: No proposal found" };
     };
   };
 
-  // 实现M/N的多签执行
   public query({caller}) func view_proposals(): async [(Nat, (Operation, Nat))] {
     var proposals_buf = Buffer.Buffer<(Nat, (Operation, Nat))>(new_proposal_index);
     var i = 0;
@@ -210,7 +222,7 @@ actor class Manager(members_init: [Principal], auth_threhold: Nat) = self {
       let proposal = proposals.get(i);
       switch (proposal) {
         case (?proposal) {
-          proposals_buf.add((i, (proposal.0, proposal.1.size())));
+          proposals_buf.add((i, (proposal.0, proposal.2)));
         };
         case (null) { assert(false) };
       };
