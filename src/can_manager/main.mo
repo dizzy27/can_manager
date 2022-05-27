@@ -1,11 +1,14 @@
 import IC "./ic";
 import Principal "mo:base/Principal";
+import Buffer "mo:base/Buffer";
 import Blob "mo:base/Blob";
 import Cycles "mo:base/ExperimentalCycles";
 import Debug "mo:base/Debug";
+import Manager "./manager";
 
-actor class () = self {
-  private let CYCLE_LIMIT = 1_000_000_000_000; //根据需要进行分配
+// create a multi-sig wallet by this canister
+actor {
+  private let CYCLE_LIMIT = 2_000_000_000_000; //根据需要进行分配
 
   public query({caller}) func cycleBalance(): async Nat{
     Cycles.balance()
@@ -15,89 +18,42 @@ actor class () = self {
     Cycles.accept(Cycles.available())
   };
 
-  public shared({caller}) func create_canister() : async IC.canister_id {    
-    let settings = {
-      freezing_threshold = null;
-      controllers = ?[Principal.fromActor(self)];
-      memory_allocation = null;
-      compute_allocation = null;
+  func size_of(texts: [Text]): Nat {
+    var text_size = 0;
+    for (_ in texts.vals()) {
+      text_size += 1;
     };
+    text_size
+  };
+
+  func init_members(members: [Text]): [Principal] {
+    var principals = Buffer.Buffer<Principal>(size_of(members));
+    for (member in members.vals()) {
+      principals.add(Principal.fromText(member));
+    };
+    principals.toArray()
+  };
+
+  public shared({caller}) func create_manager(members_init: [Text], auth_threhold: Nat): async Principal {
     let ic: IC.Self = actor("aaaaa-aa"); //ledger actor的ID
+    let members = init_members(members_init);
+    assert(auth_threhold <= size_of(members_init));
 
     Cycles.add(CYCLE_LIMIT);
-    let result = await ic.create_canister({ settings = ?settings; });
-    result.canister_id
-  };
+    let manager = await Manager.Manager(members, auth_threhold);
+    let principal = Principal.fromActor(manager);
 
-  public shared({caller}) func install_code(
-    wasm: Blob,
-    canister: Text,
-    mode: { #reinstall; #upgrade; #install }
-  ) : async Text { 
-    let settings = { 
-      arg = [];  
-      wasm_module = Blob.toArray(wasm);
-      mode = mode;
-      canister_id = Principal.fromText(canister);
-    };
-    let ic: IC.Self = actor("aaaaa-aa"); //ledger actor的ID
-    await ic.install_code(settings);
-    "code installed for " # canister
-  };
-
-  public shared({caller}) func start_canister(canister : Text) : async () {    
-    let settings = { 
-      canister_id = Principal.fromText(canister);
-    };
-    let ic: IC.Self = actor("aaaaa-aa"); //ledger actor的ID
-    await ic.start_canister(settings)
-  };
-
-  public shared({caller}) func stop_canister(canister : Text) : async () {    
-    let settings = { 
-      canister_id = Principal.fromText(canister);
-    };
-    let ic: IC.Self = actor("aaaaa-aa"); //ledger actor的ID
-    await ic.stop_canister(settings)
-  };
-
-  public shared({caller}) func delete_canister(canister : Text) : async () {    
-    let settings = { 
-      canister_id = Principal.fromText(canister);
-    };
-    let ic: IC.Self = actor("aaaaa-aa"); //ledger actor的ID
-    await ic.delete_canister(settings)
-  };
-
-  // 调试测试专用 Hello
-  type HelloCan = actor {
-    greet: shared(Text) -> async Text;
-  };
-
-  public shared({caller}) func test_hello(canister: Text, name: Text): async Text {
-    let hello: HelloCan = actor(canister);
-    await hello.greet(name)
-  };
-
-  // M/N多签提案实现 todo
-  private stable var M: Nat = 2;
-  private stable var N: Nat = 3;
-
-  type Operation = {
-    #start_canister: Text;
-    #stop_canister: Text;
-    #update_settings;
-  };
-
-  // 实现M/N的多签提案
-  public shared({caller}) func propose(proposal: Operation): async Nat {
-    // todo
-    0
-  };
-
-  // 实现M/N的多签执行
-  public shared({caller}) func approve(proposal_id: Nat): async () {
-    // todo
+    await ic.update_settings({
+      canister_id = principal;
+      settings = {
+        freezing_threshold = ?2592000;
+        controllers = ?members;
+        memory_allocation = ?0;
+        compute_allocation = ?0;
+      }
+    });
+    
+    principal
   };
 };
 
