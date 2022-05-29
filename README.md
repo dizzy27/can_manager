@@ -1,11 +1,6 @@
 # can_manager
 
-## 根据本次课程要求，第二课作业只需实现5个接口的功能，无需实现M/N的多签：
-crate_canister
-install_code
-start_canister
-stop_canister
-delete_canister
+## 根据本次课程要求，第三课作业只需实现投票的功能：
 
 Welcome to your new can_manager project and to the internet computer development community. By default, creating a new project adds this README and some template files to your project directory. You can edit these template files to customize your project and to include your own code to speed up the development cycle.
 
